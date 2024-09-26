@@ -1,0 +1,200 @@
+Traceback (most recent call last):
+  File "E:\MainHomePage\.M_HomePage\Lib\site-packages\jupyter_cache\executors\utils.py", line 58, in single_nb_execution
+    executenb(
+  File "E:\MainHomePage\.M_HomePage\Lib\site-packages\nbclient\client.py", line 1314, in execute
+    return NotebookClient(nb=nb, resources=resources, km=km, **kwargs).execute()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\MainHomePage\.M_HomePage\Lib\site-packages\jupyter_core\utils\__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dr\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "E:\MainHomePage\.M_HomePage\Lib\site-packages\nbclient\client.py", line 709, in async_execute
+    await self.async_execute_cell(
+  File "E:\MainHomePage\.M_HomePage\Lib\site-packages\nbclient\client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "E:\MainHomePage\.M_HomePage\Lib\site-packages\nbclient\client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import matplotlib.pyplot as plt
+import yfinance as yf
+from scipy.stats import levy_stable
+from fbm import FBM
+
+# GBM (Geometric Brownian Motion)
+def generate_gbm(S0, mu, sigma, T, N):
+    dt = T / N
+    t = np.linspace(0, T, N)
+    W = np.random.standard_normal(size=N)
+    W = np.cumsum(W) * np.sqrt(dt)  # Brownian motion
+    X = (mu - 0.5 * sigma ** 2) * t + sigma * W
+    S = S0 * np.exp(X)  # Geometric Brownian Motion
+    return S
+
+# FBM (Fractional Brownian Motion)
+def generate_fbm(S0, hurst, T, N):
+    f = FBM(n=N-1, hurst=hurst, length=T)
+    fbm_vals = f.fbm()
+    S = S0 * np.exp(fbm_vals)
+    return S
+
+# OU (Ornstein-Uhlenbeck Process)
+def generate_ou(S0, mu, sigma, theta, T, N):
+    dt = T / N
+    t = np.linspace(0, T, N)
+    W = np.random.standard_normal(size=N)
+    W = np.cumsum(W) * np.sqrt(dt)  # Brownian motion
+    X = np.zeros(N)
+    X[0] = S0
+    for i in range(1, N):
+        X[i] = X[i-1] + theta * (mu - X[i-1]) * dt + sigma * W[i]
+    return X
+
+# Lévy Process
+def generate_levy(S0, alpha, beta, T, N):
+    dt = T / N
+    W = levy_stable.rvs(alpha=alpha, beta=beta, size=N) * np.sqrt(dt)
+    W = np.cumsum(W)
+    S = S0 * np.exp(W)
+    return S
+
+# Heston Model (Stochastic Volatility)
+def generate_heston(S0, V0, kappa, theta, xi, rho, T, N):
+    dt = T / N
+    t = np.linspace(0, T, N)
+    W1 = np.random.standard_normal(size=N)
+    W2 = np.random.standard_normal(size=N)
+    W2 = rho * W1 + np.sqrt(1 - rho**2) * W2
+    V = np.zeros(N)
+    V[0] = V0
+    S = np.zeros(N)
+    S[0] = S0
+    for i in range(1, N):
+        V[i] = V[i-1] + kappa * (theta - V[i-1]) * dt + xi * np.sqrt(V[i-1]) * W2[i] * np.sqrt(dt)
+        S[i] = S[i-1] * np.exp((mu - 0.5 * V[i-1]) * dt + np.sqrt(V[i-1]) * W1[i] * np.sqrt(dt))
+    return S
+
+# Merton Jump Diffusion Model
+def generate_merton(S0, mu, sigma, lam, m, v, T, N):
+    dt = T / N
+    W = np.random.standard_normal(size=N)
+    W = np.cumsum(W) * np.sqrt(dt)
+    poisson_process = np.random.poisson(lam * dt, N)
+    jump_sizes = np.random.normal(m, v, N)
+    jump = np.cumsum(jump_sizes * poisson_process)
+    X = (mu - 0.5 * sigma ** 2) * np.linspace(0, T, N) + sigma * W + jump
+    S = S0 * np.exp(X)
+    return S
+
+# Function to calculate MSE
+def calculate_mse(simulated, actual):
+    return np.mean((simulated - actual) ** 2)
+
+# Download stock data
+def get_stock_data(ticker, start, end):
+    stock_data = yf.download(ticker, start=start, end=end)
+    return stock_data['Adj Close'].values
+
+# Function to calculate historical returns
+def calculate_returns(prices):
+    log_returns = np.diff(np.log(prices))
+    return log_returns
+
+# Function to fit mu and sigma based on historical data
+def fit_mu_sigma(stock_data):
+    log_returns = calculate_returns(stock_data)
+    mu = np.mean(log_returns) * 252  # annualized return
+    sigma = np.std(log_returns) * np.sqrt(252)  # annualized volatility
+    return mu, sigma
+
+# Parameters for stock simulation
+S0 = 100  # Initial stock price
+T = 1     # 1 year
+N = 252   # Number of time steps (daily)
+hurst = 0.75  # Hurst exponent for FBM
+theta = 0.1  # Mean reversion level for OU
+kappa = 0.3  # Speed of mean reversion for Heston
+xi = 0.1  # Volatility of volatility for Heston
+rho = -0.7  # Correlation between stock price and volatility in Heston
+V0 = 0.2  # Initial variance for Heston
+alpha = 1.5  # Stability parameter for Levy process
+beta = 0  # Skewness parameter for Levy process
+lam = 0.75  # Jump intensity for Merton
+m = 0  # Mean of jump size for Merton
+v = 0.1  # Std dev of jump size for Merton
+
+# Fetch actual stock data
+ticker = 'AAPL'  # Example: Apple Inc.
+start_date = '2020-01-01'
+end_date = '2023-01-01'
+stock_data = get_stock_data(ticker, start=start_date, end=end_date)
+
+# Split data into past (for fitting) and future (for comparison)
+split_ratio = 0.8
+split_index = int(len(stock_data) * split_ratio)
+past_data = stock_data[:split_index]
+future_data = stock_data[split_index:]
+
+# Fit mu and sigma using historical stock data
+mu, sigma = fit_mu_sigma(past_data)
+
+# Simulate each process for the future
+gbm_stock = generate_gbm(future_data[0], mu, sigma, T, N)
+fbm_stock = generate_fbm(future_data[0], hurst, T, N)
+ou_stock = generate_ou(future_data[0], mu, sigma, theta, T, N)
+levy_stock = generate_levy(future_data[0], alpha, beta, T, N)
+heston_stock = generate_heston(future_data[0], V0, kappa, theta, xi, rho, T, N)
+merton_stock = generate_merton(future_data[0], mu, sigma, lam, m, v, T, N)
+
+# Resize future stock data to match simulation length
+future_data_resized = np.resize(future_data, N)
+
+# Calculate MSE for each model
+mse_gbm = calculate_mse(gbm_stock, future_data_resized)
+mse_fbm = calculate_mse(fbm_stock, future_data_resized)
+mse_ou = calculate_mse(ou_stock, future_data_resized)
+mse_levy = calculate_mse(levy_stock, future_data_resized)
+mse_heston = calculate_mse(heston_stock, future_data_resized)
+mse_merton = calculate_mse(merton_stock, future_data_resized)
+
+# Display the MSE results
+print("MSE Results (based on future stock data):")
+print(f"GBM MSE: {mse_gbm}")
+print(f"FBM MSE: {mse_fbm}")
+print(f"OU MSE: {mse_ou}")
+print(f"Lévy MSE: {mse_levy}")
+print(f"Heston MSE: {mse_heston}")
+print(f"Merton MSE: {mse_merton}")
+
+# Plotting the stock price simulations
+plt.figure(figsize=(10, 6))
+plt.plot(gbm_stock, label='GBM')
+plt.plot(fbm_stock, label='FBM')
+plt.plot(ou_stock, label='OU')
+plt.plot(levy_stock, label='Levy')
+plt.plot(heston_stock, label='Heston')
+plt.plot(merton_stock, label='Merton')
+plt.plot(future_data_resized, label='Actual Stock', linestyle='--')
+plt.title('Stock Price Simulations (Future Period)')
+plt.xlabel('Days')
+plt.ylabel('Price')
+plt.legend()
+plt.show()
+
+------------------
+
+
+[1;31m---------------------------------------------------------------------------[0m
+[1;31mModuleNotFoundError[0m                       Traceback (most recent call last)
+Cell [1;32mIn[2], line 5[0m
+[0;32m      3[0m [38;5;28;01mimport[39;00m [38;5;21;01myfinance[39;00m [38;5;28;01mas[39;00m [38;5;21;01myf[39;00m
+[0;32m      4[0m [38;5;28;01mfrom[39;00m [38;5;21;01mscipy[39;00m[38;5;21;01m.[39;00m[38;5;21;01mstats[39;00m [38;5;28;01mimport[39;00m levy_stable
+[1;32m----> 5[0m [38;5;28;01mfrom[39;00m [38;5;21;01mfbm[39;00m [38;5;28;01mimport[39;00m FBM
+[0;32m      7[0m [38;5;66;03m# GBM (Geometric Brownian Motion)[39;00m
+[0;32m      8[0m [38;5;28;01mdef[39;00m [38;5;21mgenerate_gbm[39m(S0, mu, sigma, T, N):
+
+[1;31mModuleNotFoundError[0m: No module named 'fbm'
+
